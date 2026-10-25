@@ -2,7 +2,7 @@ name: CD
 
 on:
   push:
-    branches: [main, master]
+    branches: [main]
     tags:
       - 'v*.*.*'
 
@@ -14,6 +14,7 @@ jobs:
   verify-ci:
     name: Verify CI Passed
     runs-on: ubuntu-latest
+    if: github.actor != 'dependabot[bot]'
     steps:
       - name: Wait for CI workflow
         uses: lewagon/wait-on-check-action@e106e5c43240df8e9dd59b4c495028d0f0818d8e # v1.3.4
@@ -27,6 +28,7 @@ jobs:
     name: Build and Push Docker Image
     runs-on: ubuntu-latest
     needs: verify-ci
+    if: github.actor != 'dependabot[bot]'
     permissions:
       contents: read
       packages: write
@@ -82,6 +84,7 @@ jobs:
     name: Scan Docker Image
     runs-on: ubuntu-latest
     needs: build-and-push-image
+    if: github.actor != 'dependabot[bot]'
     permissions:
       contents: read
       security-events: write
@@ -106,8 +109,10 @@ jobs:
     name: Deploy to Production
     runs-on: ubuntu-latest
     needs: [build-and-push-image, scan-image]
-    # Only run if RENDER_DEPLOY_HOOK_URL secret exists
-    if: vars.RENDER_DEPLOY_HOOK_URL != '' || secrets.RENDER_DEPLOY_HOOK_URL != ''
+    # Only run if RENDER_DEPLOY_HOOK_URL secret exists and not dependabot
+    if: |
+      github.actor != 'dependabot[bot]' &&
+      secrets.RENDER_DEPLOY_HOOK_URL != ''
     environment:
       name: production
       url: ${{ vars.APP_URL || 'https://planwise.example.com' }}

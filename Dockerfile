@@ -1,6 +1,6 @@
 # Multi-stage build for PlanWise
 # Stage 1: Build the application
-FROM node:20-alpine AS builder
+FROM node:26-alpine AS builder
 
 # Set working directory
 WORKDIR /app
@@ -18,7 +18,7 @@ COPY . .
 RUN npm run build
 
 # Stage 2: Production runtime
-FROM node:20-alpine AS production
+FROM node:26-alpine AS production
 
 # Security: Create non-root user
 RUN addgroup -g 1001 -S nodejs && \

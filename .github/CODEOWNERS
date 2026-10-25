@@ -1,0 +1,35 @@
+# Code Owners for PlanWise
+# These owners will be automatically requested for review when someone opens a PR
+
+# Default owner for everything in the repo
+* @VenomousVoid
+
+# Security-sensitive files require security team review
+/server/middleware/security.ts @VenomousVoid
+/server/middleware/rateLimiter.ts @VenomousVoid
+/server/middleware/errorHandler.ts @VenomousVoid
+/server/ai/promptBuilders.ts @VenomousVoid
+/server/repositories/shareRepository.ts @VenomousVoid
+SECURITY.md @VenomousVoid
+/docs/SECURITY*.md @VenomousVoid
+
+# CI/CD and infrastructure
+/.github/workflows/ @VenomousVoid
+/Dockerfile @VenomousVoid
+/.dockerignore @VenomousVoid
+/.github/dependabot.yml @VenomousVoid
+
+# Configuration files
+/server/config.ts @VenomousVoid
+/.env.example @VenomousVoid
+/tsconfig.json @VenomousVoid
+/vitest.config.ts @VenomousVoid
+/eslint.config.js @VenomousVoid
+
+# Test infrastructure
+/server/tests/ @VenomousVoid
+/src/test/ @VenomousVoid
+
+# Documentation
+/docs/ @VenomousVoid
+README.md @VenomousVoid

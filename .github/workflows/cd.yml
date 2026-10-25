@@ -1,0 +1,192 @@
+name: CD
+
+on:
+  push:
+    branches: [main, master]
+    tags:
+      - 'v*.*.*'
+
+permissions:
+  contents: read
+
+jobs:
+  # Wait for CI to complete before deploying
+  verify-ci:
+    name: Verify CI Passed
+    runs-on: ubuntu-latest
+    steps:
+      - name: Wait for CI workflow
+        uses: lewagon/wait-on-check-action@e106e5c43240df8e9dd59b4c495028d0f0818d8e # v1.3.4
+        with:
+          ref: ${{ github.ref }}
+          check-name: 'All Checks Passed'
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          wait-interval: 10
+
+  build-and-push-image:
+    name: Build and Push Docker Image
+    runs-on: ubuntu-latest
+    needs: verify-ci
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@988b5a0280414f521da01fcc63a27aeeb4b104db # v3.6.1
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@9780b0c442fbb1117ed29e0efdff1e18412f7567 # v3.3.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata for Docker
+        id: meta
+        uses: docker/metadata-action@8e5442c4ef9f78752691e2d8f8d19755c6f78e81 # v5.5.1
+        with:
+          images: ghcr.io/${{ github.repository }}
+          tags: |
+            type=ref,event=branch
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}}
+            type=sha,prefix={{branch}}-
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@5cd11c3a4ced054e52742c5fd54dca954e0edd85 # v6.7.0
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          platforms: linux/amd64,linux/arm64
+
+      - name: Generate image summary
+        run: |
+          echo "## Docker Image Published" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Registry:** ghcr.io/${{ github.repository }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Tags:**" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          echo "${{ steps.meta.outputs.tags }}" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+
+  scan-image:
+    name: Scan Docker Image
+    runs-on: ubuntu-latest
+    needs: build-and-push-image
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - name: Run Trivy vulnerability scanner on image
+        uses: aquasecurity/trivy-action@6e7b7d1fd3e4fef0c5fa8cce1229c54b2c9bd0d8 # v0.24.0
+        with:
+          scan-type: 'image'
+          image-ref: 'ghcr.io/${{ github.repository }}:${{ github.sha }}'
+          format: 'sarif'
+          output: 'trivy-image-results.sarif'
+          severity: 'CRITICAL,HIGH'
+          exit-code: '1' # Fail if vulnerabilities found
+
+      - name: Upload Trivy results to GitHub Security
+        uses: github/codeql-action/upload-sarif@afb54ba388a7dca6ecae48f608c4ff05ff4cc77a # v3.25.15
+        if: always()
+        with:
+          sarif_file: 'trivy-image-results.sarif'
+
+  deploy:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    needs: [build-and-push-image, scan-image]
+    # Only run if RENDER_DEPLOY_HOOK_URL secret exists
+    if: vars.RENDER_DEPLOY_HOOK_URL != '' || secrets.RENDER_DEPLOY_HOOK_URL != ''
+    environment:
+      name: production
+      url: ${{ vars.APP_URL || 'https://planwise.example.com' }}
+    permissions:
+      contents: read
+    steps:
+      - name: Trigger deployment
+        run: |
+          curl -X POST "${{ secrets.RENDER_DEPLOY_HOOK_URL }}" \
+            -H "Content-Type: application/json" \
+            -d '{"ref":"${{ github.ref }}","sha":"${{ github.sha }}"}'
+          
+          echo "## Deployment Triggered" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Deployment hook called successfully" >> $GITHUB_STEP_SUMMARY
+          echo "**Environment:** production" >> $GITHUB_STEP_SUMMARY
+          echo "**Ref:** ${{ github.ref }}" >> $GITHUB_STEP_SUMMARY
+          echo "**SHA:** ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+
+# Alternative deployment configurations (commented out - enable as needed):
+#
+# Deploy to Google Cloud Run:
+#   deploy-cloud-run:
+#     name: Deploy to Cloud Run
+#     runs-on: ubuntu-latest
+#     needs: [build-and-push-image, scan-image]
+#     if: secrets.GCP_PROJECT_ID != ''
+#     permissions:
+#       contents: read
+#       id-token: write
+#     steps:
+#       - name: Authenticate to Google Cloud
+#         uses: google-github-actions/auth@v2
+#         with:
+#           workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+#           service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+#
+#       - name: Deploy to Cloud Run
+#         uses: google-github-actions/deploy-cloudrun@v2
+#         with:
+#           service: planwise
+#           region: us-central1
+#           image: ghcr.io/${{ github.repository }}:${{ github.sha }}
+#           env_vars: |
+#             NODE_ENV=production
+#             PORT=8080
+#
+# Deploy to Railway:
+#   deploy-railway:
+#     name: Deploy to Railway
+#     runs-on: ubuntu-latest
+#     needs: [build-and-push-image, scan-image]
+#     if: secrets.RAILWAY_TOKEN != ''
+#     steps:
+#       - name: Checkout code
+#         uses: actions/checkout@v4
+#
+#       - name: Install Railway CLI
+#         run: npm install -g @railway/cli
+#
+#       - name: Deploy to Railway
+#         run: railway up
+#         env:
+#           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+#
+# Deploy to Fly.io:
+#   deploy-fly:
+#     name: Deploy to Fly.io
+#     runs-on: ubuntu-latest
+#     needs: [build-and-push-image, scan-image]
+#     if: secrets.FLY_API_TOKEN != ''
+#     steps:
+#       - name: Checkout code
+#         uses: actions/checkout@v4
+#
+#       - name: Setup Fly CLI
+#         uses: superfly/flyctl-actions/setup-flyctl@master
+#
+#       - name: Deploy to Fly.io
+#         run: flyctl deploy --remote-only
+#         env:
+#           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}

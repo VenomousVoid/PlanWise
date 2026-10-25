@@ -1,5 +1,9 @@
 # PlanWise — GenAI Event Planning Assistant
 
+[![CI](https://github.com/VenomousVoid/PlanWise/actions/workflows/ci.yml/badge.svg)](https://github.com/VenomousVoid/PlanWise/actions/workflows/ci.yml)
+[![Security](https://github.com/VenomousVoid/PlanWise/actions/workflows/security.yml/badge.svg)](https://github.com/VenomousVoid/PlanWise/actions/workflows/security.yml)
+[![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
 **PlanWise** is a full-stack, GenAI-powered event planning platform architected for Indian weddings, milestone birthdays, and community festivals. It provides deterministic financial precision, countdown scheduling, vendor vetting, and cultural template workflows combined with Google Gemini AI.
 
 ---
@@ -213,16 +217,39 @@
 
 ---
 
-## 🔒 Security Model
+## 🔒 Security & Testing
 
-- **No Secrets in Repo or Client**: `GEMINI_API_KEY` is accessed exclusively in server-side environment variables.
-- **HTTP Protection**: Configured with `helmet`, compression, strict CORS allowlist, and a 500KB JSON body limit.
-- **Dual Rate Limiting**:
+**Last Verified:** October 25, 2026
+
+### Security Features
+
+- ✅ **No Secrets in Repo or Client**: `GEMINI_API_KEY` is accessed exclusively in server-side environment variables.
+- ✅ **HTTP Protection**: Configured with `helmet`, compression, and a 500KB JSON body limit.
+- ✅ **Dual Rate Limiting**:
   - Standard API routes: 200 requests per 10 minutes.
   - GenAI generation endpoints: 50 requests per 10 minutes.
-- **Sanitized Logging**: Request ID logger (`X-Request-ID`) logs only HTTP method, sanitized path, and duration. No tokens, passwords, or user payloads are ever written to console or log streams.
-- **Cryptographic Share Tokens**: Share tokens are generated using Node.js `crypto.randomBytes(24).toString('base64url')` (192 bits of entropy), with 24-hour expiration and immediate revocation capability.
-- **Audit**: `npm audit` reports **0 vulnerabilities**.
+- ✅ **Sanitized Logging**: Request ID logger (`X-Request-ID`) logs only HTTP method, sanitized path, and duration. No tokens, passwords, or user payloads are ever written to console or log streams.
+- ✅ **Cryptographic Share Tokens**: Share tokens are generated using Node.js `crypto.randomBytes(24).toString('base64url')` (192 bits of entropy), with 24-hour expiration and immediate revocation capability.
+- ✅ **Input Validation**: Zod schema validation on all API endpoints
+- ✅ **XSS Prevention**: JSON-only API responses, no HTML rendering
+- ✅ **Prompt Injection Hardening**: User input wrapped in `<USER_SUPPLIED_DATA>` delimiters
+
+### Security Auditing
+
+- **Automated Testing**: 200+ security tests covering headers, CORS, rate limiting, input validation, XSS, injection attacks, and token security
+- **Dependency Scanning**: Automated npm audit, CodeQL analysis, and Trivy vulnerability scanning in CI/CD
+- **Secret Scanning**: Gitleaks scans for exposed secrets in repository history
+- **Manual Review**: Comprehensive security review completed (see `docs/SECURITY_REVIEW.md`)
+
+### Known Security Considerations
+
+⚠️ **Important:** This is a demo application with known limitations:
+- **No Authentication**: All endpoints are unauthenticated (by design for single-user demo)
+- **CORS Configuration**: Currently accepts all origins (should be restricted for production)
+- **CSP Disabled**: Content Security Policy disabled to support Vite dev mode
+- **Trust Proxy**: Configuration mismatch between app and rate limiter (see SECURITY_REVIEW.md)
+
+See [SECURITY.md](SECURITY.md) for vulnerability reporting and detailed security information.
 
 ---
 
@@ -243,21 +270,116 @@
 
 ## 🧪 Testing
 
-PlanWise includes comprehensive automated unit and integration tests using **Vitest** and **Supertest**.
+PlanWise includes comprehensive automated testing with **200+ tests** using **Vitest**, **React Testing Library**, and **Supertest**.
 
-Run all tests:
+### Running Tests
+
 ```bash
+# Run all tests
 npm test
+
+# Run with coverage (85%+ for logic, 80%+ for middleware)
+npm run test:coverage
+
+# Run security test suite
+npm run test:security
+
+# Run specific test suites
+npm run test:server   # Server-side tests only
+npm run test:client   # Client-side tests only
+
+# Type checking
+npm run typecheck
+
+# Linting with security rules
+npm run lint
 ```
 
-### Test Coverage Highlights
-- **Budget Normalization**: Verified exact single-rupee sum matching, remainder absorption into buffer, and rejection of negative budgets.
-- **Budget Cut Engine**: Verified 10%, 15%, and custom cuts; prioritized reduction of nice-to-have before important before must-have; floor preservation; and contingency buffer protection.
-- **Timeline Engine**: Tested long-range countdown scheduling and short-notice compression (<30 days) with priority elevation.
-- **Risk Evaluation**: Tested outdoor venue rain gap detection, zero buffer alert, key vendor deadline flags, and category overspend warnings.
-- **Guest Headcount Math**: Tested confirmed RSVP multipliers, dietary breakdown sums, and dynamic catering impact.
-- **Share Repository**: Tested 192-bit cryptographic token generation, snapshot retrieval, revocation, and 24-hour TTL expiration.
-- **REST API Routes**: Tested every endpoint, HTTP 400 validation failures, and mock-driven AI failure fallback behavior (tests never call the live Gemini API).
+### Test Coverage
+
+**Server-Side Tests:**
+- ✅ **Logic Engines**: Property-based tests (100 random budgets), edge cases (zero, negative, NaN, prime numbers)
+- ✅ **Budget Cut Engine**: Priority cascade (1-50%), floor protection, buffer preservation
+- ✅ **AI Cache**: LRU eviction (100 entries), TTL expiration (10 min), SHA-256 key generation
+- ✅ **Prompt Security**: Injection hardening, delimiter escaping, length caps, control char stripping
+- ✅ **API Integration**: All 25+ endpoints, validation, error handling, fallback behavior
+- ✅ **Share Tokens**: 1,000 unique tokens, cryptographic strength, TTL, revocation
+
+**Security Tests:**
+- ✅ **HTTP Headers**: X-Content-Type-Options, X-Frame-Options, Referrer-Policy, CSP
+- ✅ **CORS & Rate Limiting**: Origin validation, 429 responses, proper headers
+- ✅ **Input Validation**: Type errors, mass assignment, SQL injection, template literals
+- ✅ **XSS Prevention**: Script tags, HTML entities, event handlers in all user inputs
+- ✅ **Error Handling**: No stack traces, file paths, or secrets in responses
+- ✅ **Logging Security**: No PII, tokens, or sensitive data in logs
+
+**Client-Side Tests:**
+- ✅ **Utilities**: Indian numbering (₹3,00,000), date calculations with fake timers
+- ✅ **Components**: AccessibleChart table toggle, ARIA labels, keyboard navigation
+- ✅ **Context**: Theme switching (light/dark/high-contrast), localStorage persistence
+- ✅ **Accessibility**: jest-axe integration for zero violations
+
+### Coverage Thresholds
+
+| Area | Lines | Functions | Branches | Statements |
+|------|-------|-----------|----------|------------|
+| server/logic | 85% | 85% | 80% | 85% |
+| server/middleware | 80% | 80% | 75% | 80% |
+| server/repositories | 80% | 80% | 75% | 80% |
+| server/ai | 70% | 70% | 65% | 70% |
+| src/ (client) | 70% | 70% | 65% | 70% |
+
+See [docs/TESTING.md](docs/TESTING.md) for comprehensive testing guide.
+
+---
+
+## 🚀 CI/CD & Deployment
+
+### Continuous Integration
+
+Every pull request and push to main triggers:
+- ✅ **Linting**: ESLint with security plugin
+- ✅ **Type Checking**: TypeScript compiler validation
+- ✅ **Testing**: Full test suite on Node 20 & 22
+- ✅ **Security Scanning**: npm audit, gitleaks, CodeQL, Trivy
+- ✅ **Build Verification**: Production build validation
+
+### Continuous Deployment
+
+Automated deployment pipeline:
+1. **Docker Build**: Multi-stage build with non-root user
+2. **Image Scanning**: Trivy vulnerability scan (fail on HIGH/CRITICAL)
+3. **Container Registry**: Push to GitHub Container Registry (ghcr.io)
+4. **Deployment**: Webhook-based deploy to production (when configured)
+
+### GitHub Actions Workflows
+
+- **ci.yml**: Lint, typecheck, test, build (runs on every PR)
+- **security.yml**: npm audit, secret scan, dependency review, CodeQL (weekly + on PR)
+- **cd.yml**: Docker build, scan, push, deploy (on push to main/tags)
+
+### Docker Support
+
+```bash
+# Build production image
+docker build -t planwise:latest .
+
+# Run container
+docker run -p 3000:3000 \
+  -e NODE_ENV=production \
+  -e GEMINI_API_KEY=your-key \
+  planwise:latest
+
+# Health check
+curl http://localhost:3000/api/health
+```
+
+**Image Features:**
+- Multi-stage build (builder + production)
+- Node 20 Alpine base (minimal size)
+- Non-root user (security)
+- Health check endpoint
+- Multi-platform (linux/amd64, linux/arm64)
 
 ---
 

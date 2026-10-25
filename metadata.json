@@ -1,0 +1,6 @@
+{
+  "name": "PlanWise - GenAI Event Planning Assistant",
+  "description": "Smart event planning assistant for weddings, birthdays, and community events with AI budget optimizer, timeline planner, vendor checklist, and cultural templates.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
